@@ -1,0 +1,9 @@
+
+data/
+runs/
+*.pt
+*.onnx
+__pycache__/
+build/
+*.db
+.venv/
