@@ -1,4 +1,3 @@
-
 data/
 runs/
 *.pt
@@ -7,3 +6,4 @@ __pycache__/
 build/
 *.db
 .venv/
+renderedImg*.png
