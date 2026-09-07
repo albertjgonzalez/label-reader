@@ -1,0 +1,25 @@
+{
+  "splits": {
+    "train": {
+      "count": 800,
+      "seed": 1
+    },
+    "val": {
+      "count": 150,
+      "seed": 2
+    },
+    "test": {
+      "count": 50,
+      "seed": 3
+    }
+  },
+  "classes": [
+    "code128",
+    "code39",
+    "datamatrix",
+    "qr",
+    "text"
+  ],
+  "margin": 20,
+  "gap": 15
+}

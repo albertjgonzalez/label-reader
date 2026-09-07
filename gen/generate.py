@@ -15,9 +15,9 @@ import numpy as np
 def placeImageOnCanvas(canvas, img, field, x, y):
     canvas.paste(img, (x, y))
     field["quad"] = [(x, y),
-    (x + img.width, y),
-    (x + img.width, y + img.height),
-    (x, y + img.height)]
+                     (x + img.width, y),
+                     (x + img.width, y + img.height),
+                     (x, y + img.height)]
 
 def getCanvasHeight(fields, margin, gap):
     total_height = 0
@@ -161,52 +161,156 @@ def addPrefixToSerialImage(serialImage, prefix, gap):
     canvas.paste(serialImage, ((prefix_image.width + gap), 0))
     return canvas
 
-def rotateCanvas(canvas, labelFields):
+def rotateAndScaleCanvas(canvas, labelFields):
     angle = random.uniform(0, 360)
-    rotation_matrix = cv2.getRotationMatrix2D((canvas.width//2, canvas.height//2), angle, 1)
-    rotated_canvas = cv2.warpAffine(np.array(canvas), rotation_matrix, (canvas.width, canvas.height))
+    rotation_matrix = cv2.getRotationMatrix2D((canvas.width//2, canvas.height//2), angle, random.uniform(0.7, 1.3))
+    cos = abs(rotation_matrix[0,0])
+    sin = abs(rotation_matrix[0,1])
+    new_width = int(canvas.height * sin + canvas.width * cos)
+    new_height = int(canvas.height * cos + canvas.width * sin)
+    rotation_matrix[0,2] += new_width / 2 - canvas.width / 2
+    rotation_matrix[1,2] += new_height / 2 - canvas.height / 2
+    rotated_canvas = cv2.warpAffine(np.array(canvas), rotation_matrix, (new_width, new_height))
     canvas = Image.fromarray(rotated_canvas)
+    for field in labelFields:
+        new_quad = []
+        for (x,y) in field["quad"]:
+            new_x = rotation_matrix[0,0] * x + rotation_matrix[0,1] * y + rotation_matrix[0,2]
+            new_y = rotation_matrix[1,0] * x + rotation_matrix[1,1] * y + rotation_matrix[1,2]
+            new_quad.append((new_x, new_y))
+        field["quad"] = new_quad
     return canvas
 
-margin = 20
-gap = 15
+def alterCanvasPerspective(canvas, labelFields):
+    points = np.float32([(0,0), (canvas.width,0), (canvas.width,canvas.height), (0,canvas.height)])
+    jitter = canvas.width * 0.08
+    new_points = np.float32([(points[i][0] + random.uniform(-jitter, jitter), points[i][1] + random.uniform(-jitter, jitter)) for i in range(4)])
+    min_x = np.min(new_points[:,0])
+    min_y = np.min(new_points[:,1])
+    if min_x < 0:
+        new_points[:,0] -= min_x
+    if min_y < 0:
+        new_points[:,1] -= min_y
+    matrix = cv2.getPerspectiveTransform(points, new_points)
+    out_height = int(max(new_points[:,1]))
+    out_width = int(max(new_points[:,0]))
+    warped = cv2.warpPerspective(np.array(canvas), matrix, (out_width, out_height))
+    canvas = Image.fromarray(warped)
+    for field in labelFields:
+        new_quad = []
+        for (x,y) in field["quad"]:
+            w = matrix[2,0] * x + matrix[2,1] * y + matrix[2,2]
+            new_x = (matrix[0,0] * x + matrix[0,1] * y + matrix[0,2]) / w
+            new_y = (matrix[1,0] * x + matrix[1,1] * y + matrix[1,2]) / w
+            new_quad.append((new_x, new_y))
+        field["quad"] = new_quad
+    return canvas
 
-labelFields = makeLabelFields()
-for field in labelFields:
-    field["image"] = renderField(field)
-    if field["role"] == "serial" and field.get("prefix") is not None:
-        field["image"] = addPrefixToSerialImage(field["image"], field["prefix"], gap)
+def makeBackground(height, width):
+    noise = np.random.randint(60, 200, (height, width, 3), dtype=np.uint8)
+    blurred = cv2.GaussianBlur(noise, (0,0), random.randint(15,25))
+    background_image = Image.fromarray(blurred)
+    return background_image
 
-#create canvas calculate size and add images
-canvasHeight = getCanvasHeight(labelFields, margin, gap)
-canvasWidth = getCanvasWidth(labelFields, margin)
+classList = ["code128",
+             "code39",
+             "datamatrix",
+             "qr",
+             "text"]
 
-canvas = Image.new('RGB',(canvasWidth,canvasHeight), (255,255,255))
+def writeYOLOFile(fields, image, path):
+    lines = []
+    for field in fields:
+        i = classList.index(field["symbology"])
+        coords = []
+        for (x,y) in field["quad"]:
+            coords.append(max(0, min(1.0, x / image.width)))
+            coords.append(max(0,0, min(1.0, y / image.height)))
+        lines.append(f"{i} {' '.join(map(str, coords))}")
+    with open(path, "w") as f:
+        f.write("\n".join(lines))
+    
 
-y = margin
-for field in labelFields:
-    if field["image"] is None:
-        continue
-    placeImageOnCanvas(canvas, field["image"], field, margin, y)
-    y += field["image"].height + gap
+#---------Create image 
+def generateLabelImage(outDir, name):
+    margin = 20
+    gap = 15
 
-canvas = rotateCanvas(canvas, labelFields)
-canvas.save("renderedImg.png")
+    labelFields = makeLabelFields()
+    for field in labelFields:
+        field["image"] = renderField(field)
+        if field["role"] == "serial" and field.get("prefix") is not None:
+            field["image"] = addPrefixToSerialImage(field["image"], field["prefix"], gap)
 
-#create data json
-ground_truth = []
-for field in labelFields:
-    ground_truth.append({
-        "role": field["role"],
-        "symbology": field["symbology"],
-        "value": str(field["value"]),
-        "prefix": field["prefix"],
-        "quad": field["quad"]
-    })
-data_json = json.dumps(ground_truth)
-with open("renderedImg.json", "w") as f:
-    f.write(data_json)
-    f.write("\n")
+    # create canvas calculate size and add images
+    canvasHeight = getCanvasHeight(labelFields, margin, gap)
+    canvasWidth = getCanvasWidth(labelFields, margin)
+
+    canvas = Image.new('RGB', (canvasWidth, canvasHeight), (255, 255, 255))
+
+    y = margin
+    for field in labelFields:
+        if field["image"] is None:
+            continue
+        placeImageOnCanvas(canvas, field["image"], field, margin, y)
+        y += field["image"].height + gap
+
+    # Manipulate the canvas randomly
+    canvas = rotateAndScaleCanvas(canvas, labelFields)
+    canvas = alterCanvasPerspective(canvas, labelFields)
+
+    # Create background image and and add canvas to it
+    background = makeBackground(int(canvas.height * 1.4), int(canvas.width * 1.4))
+    offset_x = random.randint(0, int(background.width - canvas.width))
+    offset_y = random.randint(0, int(background.height - canvas.height))
+    background.paste(canvas, (offset_x, offset_y))
+
+    for field in labelFields:
+        field["quad"] = [(x + offset_x, y + offset_y) for (x, y) in field["quad"]]
+
+    background.save(f"{outDir}/images/{name}.png")
+
+    # create YOLO file
+    writeYOLOFile(labelFields, background, f"{outDir}/labels/{name}.txt")
+
+    # create data json
+    ground_truth = []
+    for field in labelFields:
+        ground_truth.append({
+            "role": field["role"],
+            "symbology": field["symbology"],
+            "value": str(field["value"]),
+            "prefix": field["prefix"],
+            "quad": field["quad"]
+        })
+    data_json = json.dumps(ground_truth)
+    with open(f"{outDir}/labels/{name}.json", "w") as f:
+        f.write(data_json)
+        f.write("\n")
+
+def generateSplit(split, count, seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    for i in range(count):
+        generateLabelImage(f"data/{split}", f"{split}_{i:05d}")
+
+manifest = {
+    "splits" : {
+        "train" : {"count" : 800, "seed" : 1},
+        "val" : {"count" : 150, "seed" : 2},
+        "test" : {"count" : 50, "seed" : 3}
+    },
+    "classes": classList,
+    "margin" : 20,
+    "gap" : 15,
+}
+
+for split, cfg in manifest["splits"].items():
+    generateSplit(split, cfg["count"], cfg["seed"])
+
+with open(f"data/manifest.json", "w") as f:
+    json.dump(manifest, f, indent=2)
+    
 
 #use zxing to readbarcodes
 # for name, img in [("code128", barcode_image), ("code39", code39_image),
