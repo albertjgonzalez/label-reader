@@ -7,3 +7,6 @@ build/
 *.db
 .venv/
 renderedImg*.png
+qc_overlay*.png
+renderImg*
+!data/manifest.json

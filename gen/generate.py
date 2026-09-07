@@ -7,10 +7,10 @@ import cv2
 from pylibdmtx.pylibdmtx import encode
 import json
 import segno
-import zxingcpp
 from io import BytesIO
 import random
 import numpy as np
+import os
 
 def placeImageOnCanvas(canvas, img, field, x, y):
     canvas.paste(img, (x, y))
@@ -291,6 +291,8 @@ def generateLabelImage(outDir, name):
 def generateSplit(split, count, seed):
     random.seed(seed)
     np.random.seed(seed)
+    os.makedirs(f"data/{split}/images", exist_ok=True)
+    os.makedirs(f"data/{split}/labels", exist_ok=True)
     for i in range(count):
         generateLabelImage(f"data/{split}", f"{split}_{i:05d}")
 
