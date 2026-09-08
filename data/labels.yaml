@@ -1,0 +1,11 @@
+path: /content/label-reader/data
+train: train/images
+val: val/images
+test: test/images
+
+names:
+  0: code128
+  1: code39
+  2: datamatrix
+  3: qr
+  4: text
