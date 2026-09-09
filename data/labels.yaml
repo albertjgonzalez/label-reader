@@ -1,4 +1,4 @@
-path: /content/label-reader/data
+path: ./data
 train: train/images
 val: val/images
 test: test/images
