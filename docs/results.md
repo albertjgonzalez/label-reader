@@ -2,7 +2,7 @@
 
 ## Detection — YOLO11n-OBB, 60 epochs, imgsz 960
 
-Fine-tuned from DOTA-pretrained weights on 800 synthetic images, validated on 150 held-out.
+Fine-tuned from DOTA weights. 800 train / 150 val, synthetic.
 
 | Class | Instances | P | R | mAP50 | mAP50-95 |
 |---|---|---|---|---|---|
@@ -13,23 +13,17 @@ Fine-tuned from DOTA-pretrained weights on 800 synthetic images, validated on 15
 | qr | 95 | 1.000 | 1.000 | 0.995 | 0.985 |
 | text | 84 | 0.999 | 1.000 | 0.995 | 0.898 |
 
-Inference: 16.5 ms/image on a T4 at 960px.
+16.5 ms/image on a T4 at 960px.
 
-### Reading these numbers honestly
+## Notes
 
-These are saturated, and that is a statement about the dataset more than the model. The
-generator produces five symbology types at consistent scales with clean rendering; a
-detector that scores 0.995 on its own generator's output has not been tested against real
-photographs, real lighting, or the degradation a camera on a production machine would
-introduce. Deliberate image degradation (glare, uneven illumination, JPEG artifacts) was
-scoped out for time and would be the first thing added.
+Numbers are saturated because the test set is my own generator's output — clean
+rendering, consistent scale, no camera. Degradation (glare, uneven light, JPEG) was
+cut for time. That's the first thing to add.
 
-The one class that is not saturated is `text` at mAP50-95 0.898 against 0.983–0.985 for
-the code classes. Recall is 1.000, so nothing is missed — the boxes are just looser. Text
-blocks are thin rectangles where a few pixels of vertical error costs a large share of the
-box area, while the same error on a square Data Matrix barely moves IoU. This has a
-downstream consequence: Phase 3 crops from these boxes for OCR, and a loose crop on a thin
-region is more likely to clip a character than a loose crop on a 2D code.
+`text` is the weak class at 0.898 mAP50-95. Recall is 1.0 so nothing is missed, the
+boxes are just loose. Text blocks are thin, so a few pixels of vertical error eats a
+lot of IoU; the same error on a square Data Matrix barely registers. Matters later —
+Phase 3 crops these boxes for OCR and a loose crop on a thin box clips characters.
 
-Classes are geometric, not semantic — the detector identifies what kind of code it sees,
-not what the code means. Role assignment is deliberately a separate problem.
+Classes are geometric, not semantic. Role assignment happens in Phase 3.
