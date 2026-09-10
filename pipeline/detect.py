@@ -51,6 +51,7 @@ def winding(quad):
         x2, y2 = quad[(i + 1) % 4]
         total += x1 * y2 - x2 * y1
     return total
+    
 
 if __name__ == "__main__":
     import argparse
